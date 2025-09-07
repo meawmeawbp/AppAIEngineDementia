@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>คัดกรองความเสี่ยงสมองเสื่อม (เสียงพูด 3 พาร์ท) — MVP</title>
+  <link rel="icon" href="data:," />
+  <script defer src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .tab-active{border-bottom:3px solid #4f46e5;color:#111827}
+    .chip{padding:.25rem .6rem;border:1px solid #e5e7eb;border-radius:999px}
+  </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+<div class="max-w-4xl mx-auto p-4">
+  <header class="mb-4">
+    <h1 class="text-2xl font-bold">แอพคัดกรองสมองเสื่อม — แบบสอบถาม + อัดเสียง 3 พาร์ท + ทำนายผล + ฝึกสมอง</h1>
+    <p class="text-sm text-gray-600">UI แบบแท็บ • ใช้ไมค์อัดเสียงในเบราว์เซอร์ • เรียก AI Engine ผ่าน FastAPI</p>
+  </header>
+
+  <!-- Tabs -->
+  <nav class="flex flex-wrap gap-4 border-b mb-4">
+    <button class="py-2 px-3 tab-btn tab-active" data-target="#tab-survey">แบบสอบถาม</button>
+    <button class="py-2 px-3 tab-btn" data-target="#tab-record">อัดเสียง (3 พาร์ท)</button>
+    <button class="py-2 px-3 tab-btn" data-target="#tab-result">ผลทำนาย</button>
+    <button class="py-2 px-3 tab-btn" data-target="#tab-train">ฝึกสมอง</button>
+  </nav>
+
+  <!-- TAB 1: SURVEY -->
+  <section id="tab-survey" class="tab-panel">
+    <div class="bg-white rounded-xl shadow p-4 space-y-4">
+      <div class="flex items-center gap-2">
+        <span class="chip">Step 1</span>
+        <h2 class="font-semibold">แบบสอบถาม + คำนวณคะแนน</h2>
+      </div>
+
+      <div class="grid gap-3 md:grid-cols-2">
+        <label class="text-sm">SubjectID
+          <div class="flex gap-2">
+            <input id="subjectId" class="w-full border rounded-lg p-2" placeholder="เช่น TH250811-0001" />
+            <button id="btnNewId" class="px-3 py-2 rounded-lg border bg-gray-50">สุ่ม</button>
+          </div>
+        </label>
+        <label class="text-sm">ผู้ติดต่อ/ผู้ดูแล
+          <input id="caregiver" class="w-full border rounded-lg p-2" placeholder="ชื่อ-เบอร์โทร" />
+        </label>
+        <label class="text-sm">อายุ (ปี)
+          <input id="age" type="number" min="40" max="120" class="w-full border rounded-lg p-2" />
+        </label>
+        <label class="text-sm">เพศ
+          <select id="gender" class="w-full border rounded-lg p-2">
+            <option value="">เลือก</option><option>หญิง</option><option>ชาย</option><option>ไม่ระบุ</option>
+          </select>
+        </label>
+        <label class="text-sm">การศึกษา
+          <select id="education" class="w-full border rounded-lg p-2">
+            <option value="">เลือก</option><option>ต่ำกว่าประถม</option><option>ประถม</option><option>มัธยม</option><option>อาชีวะ/อนุปริญญา</option><option>ปริญญาตรีขึ้นไป</option>
+          </select>
+        </label>
+        <label class="text-sm">ภูมิภาค/สำเนียง
+          <select id="accent" class="w-full border rounded-lg p-2">
+            <option value="">—</option><option>กลาง</option><option>อีสาน</option><option>เหนือ</option><option>ใต้</option>
+          </select>
+        </label>
+      </div>
+
+      <label class="text-sm inline-flex items-start gap-2">
+        <input id="consent" type="checkbox" class="mt-1">
+        <span>ยินยอมให้เก็บและใช้ข้อมูลเพื่อคัดกรองเบื้องต้น/พัฒนาโมเดล (ปกปิดตัวตน)</span>
+      </label>
+
+      <div class="border rounded-xl p-3">
+        <div class="mb-3 text-sm text-gray-600">
+            ความถี่ของอาการ/พฤติกรรม (เลือก 1 ค่าต่อข้อ) — คลิกปุ่มคำตอบ
+        </div>
+        <!-- จัดเป็นการ์ด 2 คอลัมน์บนจอใหญ่ / 1 คอลัมน์บนมือถือ -->
+        <div id="surveyQ" class="grid gap-3 sm:grid-cols-1 md:grid-cols-2"></div>
+      </div>
+
+
+      <div class="flex items-center gap-3">
+        <button id="btnCalc" class="bg-indigo-600 text-white px-4 py-2 rounded-xl">คำนวณคะแนน</button>
+        <div id="scoreBox" class="text-sm"></div>
+      </div>
+
+      <div class="text-xs text-gray-600">
+        เกณฑ์: 14–29 = <b>ไม่เป็น</b> • 30–39 = <b>เสี่ยง</b> • 40–56 = <b>เป็นแล้ว</b>
+      </div>
+    </div>
+  </section>
+
+  <!-- TAB 2: RECORD -->
+  <section id="tab-record" class="tab-panel hidden">
+    <div class="bg-white rounded-xl shadow p-4 space-y-4">
+      <div class="flex items-center gap-2">
+        <span class="chip">Step 2</span>
+        <h2 class="font-semibold">อัดเสียง 3 พาร์ท (PFT / CTD / SFT)</h2>
+      </div>
+      <p class="text-sm text-gray-600">มาตรฐานไฟล์ที่ส่งให้ AI: WAV 16kHz mono (ระบบจะแปลงให้อัตโนมัติ)</p>
+
+      <!-- PFT -->
+      <div class="p-3 border rounded-xl">
+        <div class="font-medium">พาร์ท 1 — PFT (คำขึ้นต้นด้วย “ก.”) — 60 วินาที</div>
+        <div class="flex items-center gap-2 my-2">
+          <button class="btn bg-indigo-600 text-white px-3 py-1.5 rounded" data-part="PFT" data-action="start">เริ่ม</button>
+          <button class="btn bg-gray-700 text-white px-3 py-1.5 rounded" data-part="PFT" data-action="stop" disabled>หยุด</button>
+          <span id="timerPFT" class="text-sm text-gray-600">00:00</span>
+        </div>
+        <audio id="audioPFT" controls class="w-full hidden"></audio>
+        <div id="infoPFT" class="text-xs text-gray-600"></div>
+      </div>
+
+      <!-- CTD -->
+      <div class="p-3 border rounded-xl">
+        <div class="font-medium">พาร์ท 2 — CTD (บรรยายภาพ Cookie Theft) — 60 วินาที</div>
+        <div class="my-2">
+          <img id="ctdImg" alt="Cookie Theft" class="max-w-full rounded border" />
+        </div>
+        <div class="flex items-center gap-2 my-2">
+          <button class="btn bg-indigo-600 text-white px-3 py-1.5 rounded" data-part="CTD" data-action="start">เริ่ม</button>
+          <button class="btn bg-gray-700 text-white px-3 py-1.5 rounded" data-part="CTD" data-action="stop" disabled>หยุด</button>
+          <span id="timerCTD" class="text-sm text-gray-600">00:00</span>
+        </div>
+        <audio id="audioCTD" controls class="w-full hidden"></audio>
+        <div id="infoCTD" class="text-xs text-gray-600"></div>
+      </div>
+
+      <!-- SFT -->
+      <div class="p-3 border rounded-xl">
+        <div class="font-medium">พาร์ท 3 — SFT (บอกชื่อสัตว์มากที่สุด) — 60 วินาที</div>
+        <div class="flex items-center gap-2 my-2">
+          <button class="btn bg-indigo-600 text-white px-3 py-1.5 rounded" data-part="SFT" data-action="start">เริ่ม</button>
+          <button class="btn bg-gray-700 text-white px-3 py-1.5 rounded" data-part="SFT" data-action="stop" disabled>หยุด</button>
+          <span id="timerSFT" class="text-sm text-gray-600">00:00</span>
+        </div>
+        <audio id="audioSFT" controls class="w-full hidden"></audio>
+        <div id="infoSFT" class="text-xs text-gray-600"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TAB 3: RESULT / PREDICT -->
+  <section id="tab-result" class="tab-panel hidden">
+    <div class="bg-white rounded-xl shadow p-4 space-y-4">
+      <div class="flex items-center gap-2">
+        <span class="chip">Step 3</span>
+        <h2 class="font-semibold">ทำนายผลจาก AI Engine</h2>
+      </div>
+      <div class="text-sm text-gray-600">ระบบจะส่งไฟล์ WAV ของ 3 พาร์ทไปที่เซิร์ฟเวอร์แล้วแสดงผลลัพธ์</div>
+      <div class="flex flex-wrap gap-3">
+        <button id="btnPredict" class="bg-indigo-600 text-white px-4 py-2 rounded-xl">ส่งไปทำนาย</button>
+        <span class="text-xs text-gray-500">Endpoint: <code id="predUrl"></code></span>
+      </div>
+      <pre id="predJson" class="text-xs bg-gray-50 p-2 rounded overflow-x-auto h-48"></pre>
+      <div id="predBadge"></div>
+      <div class="text-xs text-gray-500">หมายเหตุ: ถ้าติด CORS ให้เปิดใช้งาน CORS ใน FastAPI แล้วรีเฟรชหน้านี้</div>
+    </div>
+  </section>
+
+  <!-- TAB 4: BRAIN TRAINING -->
+  <section id="tab-train" class="tab-panel hidden">
+    <div class="bg-white rounded-xl shadow p-4 space-y-4">
+      <div class="flex items-center gap-2">
+        <span class="chip">Step 4</span>
+        <h2 class="font-semibold">ฝึกพัฒนาสมอง (Mini Games)</h2>
+      </div>
+      <div class="grid md:grid-cols-2 gap-4">
+        <div class="border rounded-xl p-3">
+          <div class="font-medium mb-1">เกมจำคำ</div>
+          <div class="text-sm text-gray-600 mb-2">แสดงคำ 5 คำ ให้จำให้ได้ แล้วพิมพ์กลับมา</div>
+          <div id="memWords" class="text-xl font-semibold tracking-wide"></div>
+          <div class="mt-2 flex gap-2">
+            <button id="btnMemShow" class="px-3 py-1.5 rounded bg-gray-700 text-white">แสดงคำ</button>
+            <button id="btnMemHide" class="px-3 py-1.5 rounded bg-gray-200">ซ่อน</button>
+          </div>
+          <input id="memAns" class="mt-2 w-full border rounded-lg p-2" placeholder="พิมพ์คำที่จำได้คั่นด้วยเว้นวรรค">
+          <button id="btnMemCheck" class="mt-2 px-3 py-1.5 rounded bg-indigo-600 text-white">ตรวจ</button>
+          <div id="memScore" class="text-sm mt-2"></div>
+        </div>
+
+        <div class="border rounded-xl p-3">
+          <div class="font-medium mb-1">ตั้งชื่อสัตว์ให้ได้มากที่สุด (ใน 30 วินาที)</div>
+          <div class="text-sm text-gray-600 mb-2">พิมพ์ชื่อสัตว์ต่อเนื่อง</div>
+          <div class="flex items-center gap-2">
+            <button id="btnAnimalStart" class="px-3 py-1.5 rounded bg-gray-700 text-white">เริ่ม 30s</button>
+            <span id="animalTimer" class="text-sm text-gray-600">30</span>
+          </div>
+          <textarea id="animalBox" rows="4" class="mt-2 w-full border rounded-lg p-2" placeholder="ตัวอย่าง: หมู วัว ม้า ..."></textarea>
+          <button id="btnAnimalScore" class="mt-2 px-3 py-1.5 rounded bg-indigo-600 text-white">นับจำนวน</button>
+          <div id="animalOut" class="text-sm mt-2"></div>
+        </div>
+
+        <!-- STROOP MINI -->
+        <div class="border rounded-xl p-3">
+            <div class="font-medium mb-1">ฝึกสมอง (Stroop แบบย่อ)</div>
+            <div class="text-sm text-gray-600 mb-2">
+                แตะปุ่มให้ตรงกับ <b>สีของตัวอักษร</b> ไม่ใช่คำที่อ่าน (รอบละ 10 ข้อ)
+            </div>
+
+            <div id="stroopWord" class="text-3xl font-bold text-center my-4">เริ่ม</div>
+
+            <div class="flex gap-2 justify-center mb-2">
+                <button class="px-3 py-1.5 rounded bg-gray-200" data-stroop="แดง">แดง</button>
+                <button class="px-3 py-1.5 rounded bg-gray-200" data-stroop="เขียว">เขียว</button>
+                <button class="px-3 py-1.5 rounded bg-gray-200" data-stroop="น้ำเงิน">น้ำเงิน</button>
+                <button class="px-3 py-1.5 rounded bg-gray-200" data-stroop="ดำ">ดำ</button>
+            </div>
+
+            <div class="text-center text-sm text-gray-600 mb-2">
+                <span id="stroopProg">ข้อที่ 0 / 10</span>
+            </div>
+
+            <div class="flex gap-2 justify-center">
+                <button id="btnStroopStart" class="px-4 py-2 rounded bg-gray-700 text-white">เริ่มแบบฝึก</button>
+                <span id="stroopStatus" class="text-sm self-center"></span>
+            </div>
+        </div>
+
+        <!-- REACTION TIME MINI -->
+        <div class="border rounded-xl p-3">
+            <div class="font-medium mb-1">ฝึกสมอง (Reaction Time แบบย่อ)</div>
+            <div class="text-sm text-gray-600 mb-2">
+                รอกล่องเปลี่ยนเป็น <b class="text-green-600">สีเขียว</b> แล้วแตะให้ไวสุด (รอบละ 5 ครั้ง)
+            </div>
+
+            <div id="rtBox" class="h-28 rounded-xl flex items-center justify-center select-none
+                                    text-xl font-semibold bg-gray-200 text-gray-700">
+                แตะ "เริ่ม" เพื่อเริ่มรอบแรก
+            </div>
+
+            <div class="flex gap-2 justify-center mt-3">
+                <button id="btnRTStart" class="px-4 py-2 rounded bg-gray-700 text-white">เริ่ม</button>
+                <button id="btnRTStop"  class="px-4 py-2 rounded bg-gray-300 text-gray-700" disabled>หยุด/ยกเลิก</button>
+            </div>
+
+            <div class="text-center text-sm text-gray-600 mt-2">
+                <span id="rtProg">รอบที่ 0 / 5</span> • <span id="rtMsg">พร้อม</span>
+            </div>
+
+            <div id="rtSummary" class="text-center text-sm mt-2"></div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <footer class="text-xs text-gray-500 mt-8">© 2025 MVP (เพื่อการวิจัย/คัดกรองเบื้องต้นเท่านั้น)</footer>
+</div>
+
+<script>
+/* ====== CONFIG ====== */
+const PREDICT_URL = "http://localhost:8000/predict";
+const CTD_IMAGE_URL = "https://ichef.bbci.co.uk/news/1024/cpsprodpb/13E17/production/_114913418_cookietheft.jpg.webp";
+/* ==================== */
+
+/* ใส่ URL ของ Apps Script Web App (ลงท้าย /exec) */
+const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbwcx8wyuIBqgBem0rygTBtuBmxqMifZOjuACaVOINAY9hRTEGrkYiFdrMfYEeoYgfA/exec";
+/* ==================== */
+
+
+/* Tabs */
+const tabs = document.querySelectorAll('.tab-btn');
+const panels = document.querySelectorAll('.tab-panel');
+tabs.forEach(btn => {
+  btn.addEventListener('click', () => {
+    tabs.forEach(b => b.classList.remove('tab-active'));
+    panels.forEach(p => p.classList.add('hidden'));
+    btn.classList.add('tab-active');
+    document.querySelector(btn.dataset.target).classList.remove('hidden');
+  });
+});
+
+/* Subject ID */
+function newSubjectId(){
+  const d = new Date();
+  const pad = n=>String(n).padStart(2,'0');
+  const y = String(d.getFullYear()).slice(-2), m=pad(d.getMonth()+1), dd=pad(d.getDate()), hh=pad(d.getHours()), mm=pad(d.getMinutes());
+  return `TH${y}${m}${dd}-${hh}${mm}`;
+}
+document.getElementById('btnNewId').onclick = ()=>{
+  document.getElementById('subjectId').value = newSubjectId();
+};
+document.getElementById('predUrl').textContent = PREDICT_URL;
+
+/* Survey builder */
+const CHOICES = [
+  {text:"ทุกวัน", score:4},
+  {text:"เกือบทุกสัปดาห์", score:3},
+  {text:"เดือนละ 1–2 ครั้ง", score:2},
+  {text:"ไม่เคย หรือปีละครั้ง", score:1},
+];
+const QUESTIONS = [
+  "ลืมของ/ลืมนัดหมายบ่อย",
+  "หลงทางในที่คุ้นเคย",
+  "เล่าเรื่องเดิมซ้ำ ๆ",
+  "หาคำศัพท์ง่าย ๆ ไม่เจอ",
+  "จัดการเงิน/จ่ายบิลยากขึ้น",
+  "สมาธิลดลง ทำกิจกรรมต่อเนื่องยาก",
+  "สับสนวันเวลา/ฤดูกาล",
+  "ตามเรื่อง/ตามข่าวไม่ทัน",
+  "ทำงานบ้าน/งานอดิเรกยากขึ้น",
+  "อารมณ์/พฤติกรรมเปลี่ยนแปลงชัด",
+  "นอนหลับไม่เป็นเวลา",
+  "อารมณ์หงุดหงิดง่าย",
+  "การสื่อสารติดขัด (เรียบเรียงไม่ต่อเนื่อง)",
+  "การตัดสินใจช้าลง/ผิดพลาดบ่อย"
+];
+function buildSurvey(){
+  const box = document.getElementById('surveyQ');
+  box.innerHTML = "";
+  QUESTIONS.forEach((q, qi) => {
+    const name = `q${qi}`;
+
+    // การ์ดคำถาม
+    const card = document.createElement('div');
+    card.className = "p-3 border rounded-xl h-full flex flex-col gap-2";
+
+    // ข้อความคำถาม
+    const qText = document.createElement('div');
+    qText.className = "text-sm font-medium";
+    qText.textContent = `${qi+1}. ${q}`;
+    card.appendChild(qText);
+
+    // กล่องตัวเลือก (2x2)
+    const opts = document.createElement('div');
+    opts.className = "grid grid-cols-2 gap-2";
+
+    CHOICES.forEach(c => {
+      const id = `${name}-${c.score}`;
+      const label = document.createElement('label');
+      // ใช้ peer-checked ให้ปุ่มเปลี่ยนสีเมื่อเลือก
+      label.className = "cursor-pointer";
+
+      label.innerHTML = `
+        <input id="${id}" type="radio" name="${name}" value="${c.score}"
+               class="peer sr-only">
+        <div class="w-full text-sm rounded-lg border px-3 py-2
+                    hover:bg-gray-50
+                    peer-checked:bg-indigo-600 peer-checked:text-white peer-checked:border-indigo-600
+                    transition-colors">
+          ${c.text}
+        </div>
+      `;
+      opts.appendChild(label);
+    });
+
+    card.appendChild(opts);
+    box.appendChild(card);
+  });
+}
+buildSurvey();
+
+function calcScore(){
+  let total = 0, answered=0;
+  for(let i=0;i<QUESTIONS.length;i++){
+    const sel = document.querySelector(`input[name="q${i}"]:checked`);
+    if(sel){ total += Number(sel.value); answered++; }
+  }
+  const label = (total>=14 && total<=29) ? "ไม่เป็น"
+               : (total>=30 && total<=39) ? "เสี่ยง"
+               : (total>=40 && total<=56) ? "เป็นแล้ว" : "—";
+  document.getElementById('scoreBox').innerHTML =
+    `<div class="p-2 rounded bg-gray-50 border">
+      ตอบแล้ว: ${answered}/${QUESTIONS.length} • คะแนนรวม: <b>${total}</b> • Label: <b>${label}</b>
+    </div>`;
+  return {total, label};
+}
+document.getElementById('btnCalc').onclick = calcScore;
+
+/* Recording (3 parts) -> record as webm, then convert to WAV16k before sending */
+const rec = {
+  PFT:{chunks:[], blob:null, seconds:0, media:null, timer:null, wav:null},
+  CTD:{chunks:[], blob:null, seconds:0, media:null, timer:null, wav:null},
+  SFT:{chunks:[], blob:null, seconds:0, media:null, timer:null, wav:null},
+};
+function fmt(sec){const m=String(Math.floor(sec/60)).padStart(2,'0');const s=String(sec%60).padStart(2,'0');return m+":"+s;}
+function attachPart(part){
+  const btnStart = document.querySelector(`.btn[data-part="${part}"][data-action="start"]`);
+  const btnStop  = document.querySelector(`.btn[data-part="${part}"][data-action="stop"]`);
+  const timerEl  = document.getElementById('timer'+part);
+  const audioEl  = document.getElementById('audio'+part);
+  const infoEl   = document.getElementById('info'+part);
+
+  // formatter นับถอยหลัง mm:ss
+  const fmtMMSS = (sec) => {
+    const m = String(Math.floor(sec/60)).padStart(2,'0');
+    const s = String(sec%60).padStart(2,'0');
+    return `${m}:${s}`;
+  };
+
+  // ปิดการทำงานของปุ่มหยุดระหว่างอัด (กันคลิก)
+  btnStop.onclick = () => {};
+
+  btnStart.onclick = async () => {
+    if(!document.getElementById('consent').checked){
+      alert('กรุณาติ๊กยินยอมก่อน'); return;
+    }
+
+    // เคลียร์สถานะเดิม
+    if (rec[part].timer){ clearInterval(rec[part].timer); rec[part].timer = null; }
+    rec[part].chunks = []; rec[part].blob = null; rec[part].wav = null;
+    rec[part].seconds = 0;
+    let remaining = 60;                      // เริ่มที่ 60 วิ
+    timerEl.textContent = fmtMMSS(remaining);
+
+    // ขอไมค์
+    let stream;
+    try{
+      stream = await navigator.mediaDevices.getUserMedia({ audio:true });
+    }catch(e){
+      alert('ไม่สามารถเข้าถึงไมโครโฟนได้'); return;
+    }
+
+    // สร้าง MediaRecorder
+    const mr = new MediaRecorder(stream, { mimeType:'audio/webm' });
+    rec[part].media = mr;
+
+    mr.ondataavailable = e => { if(e.data && e.data.size>0) rec[part].chunks.push(e.data); };
+
+    mr.onstop = async () => {
+      // ปิดตัวจับเวลา + ปิดไมค์
+      if (rec[part].timer){ clearInterval(rec[part].timer); rec[part].timer = null; }
+      stream.getTracks().forEach(t=>t.stop());
+
+      // รวมไฟล์ + แสดงผล และแปลง WAV16k
+      rec[part].blob = new Blob(rec[part].chunks, {type:'audio/webm'});
+      audioEl.src = URL.createObjectURL(rec[part].blob);
+      audioEl.classList.remove('hidden');
+      infoEl.textContent = `ไฟล์ ~ ${(rec[part].blob.size/1024).toFixed(1)} KB, ยาว ~ ${fmtMMSS(rec[part].seconds) } (กำลังแปลงเป็น WAV16k...)`;
+      
+      try{
+        rec[part].wav = await webmToWav16k(rec[part].blob);
+        infoEl.textContent = `พร้อมส่งให้ AI: ${(rec[part].wav.size/1024).toFixed(1)} KB (WAV 16kHz mono)`;
+
+      // 🔽 เพิ่มบรรทัดนี้เพื่ออัปโหลดขึ้น Google Drive ทันที
+      uploadToDrive(part, rec[part].wav, rec[part].seconds, infoEl);
+      
+      }catch(err){
+        infoEl.textContent = 'แปลงไฟล์ไม่สำเร็จ: ' + err.message;
+      }
+
+      // คืนสถานะปุ่ม
+      btnStart.disabled = false;
+      btnStop.disabled  = true;
+    };
+
+    // เริ่มอัด
+    mr.start(100);
+
+    // ล็อกปุ่ม: เริ่ม = ปิด, หยุด = ปิด (กดไม่ได้)
+    btnStart.disabled = true;
+    btnStop.disabled  = true;      // ปิดไม่ให้หยุดเอง
+
+    // นับถอยหลัง 60 วินาที แล้วหยุดอัตโนมัติ
+    rec[part].timer = setInterval(()=>{
+      remaining--;
+      rec[part].seconds++;                 // เก็บเวลาที่อัดจริง (นับขึ้นสำหรับสรุป)
+      timerEl.textContent = fmtMMSS(remaining);
+
+      if (remaining <= 0){
+        clearInterval(rec[part].timer); rec[part].timer = null;
+        if (mr.state !== 'inactive') mr.stop();   // onstop จะจัดการต่อให้ครบ
+      }
+    }, 1000);
+  };
+}
+
+
+['PFT','CTD','SFT'].forEach(attachPart);
+document.getElementById('ctdImg').src = CTD_IMAGE_URL;
+
+/* WebAudio helpers: decode and re-encode to WAV 16k mono */
+async function webmToWav16k(blob){
+  const arrBuf = await blob.arrayBuffer();
+  const online = new (window.AudioContext||window.webkitAudioContext)();
+  const decoded = await online.decodeAudioData(arrBuf);
+  const ch0 = decoded.getChannelData(0);
+  const srcSR = decoded.sampleRate;
+  online.close();
+
+  const dstSR = 16000;
+  const offline = new (window.OfflineAudioContext||window.webkitOfflineAudioContext)(1, Math.ceil(ch0.length*dstSR/srcSR), dstSR);
+  const buf = offline.createBuffer(1, ch0.length, srcSR);
+  buf.copyToChannel(ch0,0);
+  const src = offline.createBufferSource(); src.buffer = buf; src.connect(offline.destination); src.start();
+  const rendered = await offline.startRendering();
+  const pcm = rendered.getChannelData(0);
+  const pcm16 = floatTo16BitPCM(pcm);
+  return encodeWAV(pcm16, dstSR);
+}
+function floatTo16BitPCM(float32){ const out=new Int16Array(float32.length); for(let i=0;i<float32.length;i++){ let s=Math.max(-1,Math.min(1,float32[i])); out[i]= s<0? s*0x8000 : s*0x7FFF; } return out; }
+function encodeWAV(int16, sampleRate=16000){
+  const byteRate=sampleRate*2, blockAlign=2;
+  const buf=new ArrayBuffer(44+int16.length*2), v=new DataView(buf);
+  const w=(o,s)=>{ for(let i=0;i<s.length;i++) v.setUint8(o+i, s.charCodeAt(i)); };
+  w(0,"RIFF"); v.setUint32(4,36+int16.length*2,true); w(8,"WAVE"); w(12,"fmt ");
+  v.setUint32(16,16,true); v.setUint16(20,1,true); v.setUint16(22,1,true);
+  v.setUint32(24,sampleRate,true); v.setUint32(28,byteRate,true);
+  v.setUint16(32,blockAlign,true); v.setUint16(34,16,true);
+  w(36,"data"); v.setUint32(40,int16.length*2,true);
+  for(let i=0,off=44;i<int16.length;i++,off+=2) v.setInt16(off,int16[i],true);
+  return new Blob([v],{type:"audio/wav"});
+}
+
+// --- แปลง Blob → dataURL(base64)
+function blobToBase64(blob){
+  return new Promise((resolve,reject)=>{
+    const fr = new FileReader();
+    fr.onload = () => resolve(fr.result);
+    fr.onerror = reject;
+    fr.readAsDataURL(blob);
+  });
+}
+
+// --- อัปโหลดไฟล์ไป Google Drive ผ่าน Apps Script
+async function uploadToDrive(part, wavBlob, seconds, infoEl){
+  try{
+    if(!WEBAPP_URL) throw new Error("ยังไม่ได้ตั้งค่า WEBAPP_URL");
+    const subjectId = document.getElementById('subjectId').value || 'Unknown';
+    const gender    = (document.getElementById('gender')||{}).value || '';
+    const education = (document.getElementById('education')||{}).value || '';
+    const accent    = (document.getElementById('accent')||{}).value || '';
+
+    // ตั้งชื่อไฟล์
+    const now = new Date(), pad = n=>String(n).padStart(2,'0');
+    const dt  = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+    const filename = `${subjectId}_${part}_${dt}.wav`;
+
+    // แปลงเป็น base64 (data URL)
+    const dataUrl = await blobToBase64(wavBlob);
+
+    // สร้าง metadata ที่จะส่งไป Apps Script
+    const meta = {
+      Filename: filename,
+      SubjectID: subjectId,
+      Task: part,
+      Gender: gender,
+      Education: education,
+      RegionAccent: accent,
+      DurationSec: seconds,
+      AvgRMS: null,          // ถ้ายังไม่มี QC ก็ส่ง null ไปก่อนได้
+      SilenceRatio: null,
+      ClipCount: null,
+      Recorder: navigator.userAgent,
+      DateTimeISO: new Date().toISOString(),
+      AudioBase64: dataUrl   // สำคัญ
+    };
+
+    // ส่งแบบ simple request (ไม่มี preflight) ด้วย text/plain
+    let resp = await fetch(WEBAPP_URL, {
+      method: "POST",
+      headers: { "Content-Type":"text/plain;charset=utf-8" },
+      body: JSON.stringify(meta)
+    });
+
+    // ถ้าโดน CORS ก็ fallback เป็น no-cors (ส่งได้ แต่อ่านผลไม่ได้)
+    if(!resp.ok){
+      await fetch(WEBAPP_URL, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type":"text/plain;charset=utf-8" },
+        body: JSON.stringify(meta)
+      });
+      if(infoEl) infoEl.innerHTML += " • อัปโหลด (no-cors) สำเร็จ ✅";
+      return;
+    }
+
+    // อ่านผลตอบกลับ (ถ้าผ่าน CORS)
+    const js = await resp.json().catch(()=>({}));
+    if(js && js.ok){
+      if(infoEl){
+        const link = js.url ? ` <a href="${js.url}" target="_blank" rel="noopener">เปิดใน Drive</a>` : "";
+        infoEl.innerHTML += ` • อัปโหลดสำเร็จ ✅${link}`;
+      }
+    }else{
+      if(infoEl) infoEl.innerHTML += " • อัปโหลดเสร็จ (อ่านผลไม่สมบูรณ์) ✅";
+    }
+  }catch(err){
+    if(infoEl) infoEl.innerHTML += ` • อัปโหลดล้มเหลว: ${err.message}`;
+  }
+}
+
+
+/* Predict via FastAPI */
+document.getElementById('btnPredict').onclick = async ()=>{
+  const outEl = document.getElementById('predJson');
+  const badge = document.getElementById('predBadge');
+  badge.innerHTML = ""; outEl.textContent = "";
+
+  const pft = rec.PFT.wav, ctd = rec.CTD.wav, sft = rec.SFT.wav;
+  if(!pft || !ctd || !sft){ outEl.textContent = "กรุณาอัดครบทั้ง 3 พาร์ทก่อน"; return; }
+
+  try{
+    const fd = new FormData();
+    fd.append('pft', new File([pft], 'pft.wav', {type:'audio/wav'}));
+    fd.append('ctd', new File([ctd], 'ctd.wav', {type:'audio/wav'}));
+    fd.append('sft', new File([sft], 'sft.wav', {type:'audio/wav'}));
+    outEl.textContent = "กำลังส่งไปยังเซิร์ฟเวอร์...";
+    const res = await fetch(PREDICT_URL, { method:'POST', body: fd });
+    const js  = await res.json();
+    outEl.textContent = JSON.stringify(js, null, 2);
+
+    // แสดง badge สรุป
+    const decision = (js.decision||"").toLowerCase();
+    let color = "bg-gray-200 text-gray-800", text = "ไม่ทราบผล";
+    if(decision.includes("normal")||decision.includes("ไม่เป็น")){ color="bg-green-100 text-green-800"; text="ไม่เป็น (normal)"; }
+    if(decision.includes("risk")||decision.includes("เสี่ยง")){ color="bg-yellow-100 text-yellow-800"; text="เสี่ยง"; }
+    if(decision.includes("dementia")||decision.includes("เป็น")){ color="bg-red-100 text-red-800"; text="เป็นแล้ว"; }
+    badge.innerHTML = `<div class="inline-block px-3 py-1 rounded ${color}">ผลสรุป: <b>${text}</b></div>`;
+  }catch(err){
+    outEl.textContent = "เรียกใช้งานไม่สำเร็จ: " + err.message;
+  }
+};
+
+/* Brain training */
+const WORD_BANK = ["ดอกไม้","ช้อน","หนังสือ","นาฬิกา","โทรศัพท์","เก้าอี้","หมวก","สะพาน","ภูเขา","แม่น้ำ"];
+function randWords(n=5){ const a=[...WORD_BANK].sort(()=>Math.random()-0.5).slice(0,n); return a; }
+let curWords = randWords();
+document.getElementById('memWords').textContent = curWords.join(" • ");
+document.getElementById('btnMemShow').onclick = ()=>{ document.getElementById('memWords').textContent = curWords.join(" • "); };
+document.getElementById('btnMemHide').onclick = ()=>{ document.getElementById('memWords').textContent = "•••••"; };
+document.getElementById('btnMemCheck').onclick = ()=>{
+  const ans = document.getElementById('memAns').value.trim().split(/\s+/).filter(Boolean);
+  const set = new Set(curWords);
+  let ok=0; ans.forEach(x=>{ if(set.has(x)) ok++; });
+  document.getElementById('memScore').textContent = `จำได้ ${ok}/${curWords.length} คำ`;
+  curWords = randWords(); // ชุดใหม่รอบถัดไป
+};
+
+let animalTimer=null, left=30;
+document.getElementById('btnAnimalStart').onclick = ()=>{
+  left = 30; document.getElementById('animalTimer').textContent = left;
+  if(animalTimer) clearInterval(animalTimer);
+  animalTimer = setInterval(()=>{ left--; document.getElementById('animalTimer').textContent = left; if(left<=0){ clearInterval(animalTimer); } },1000);
+};
+document.getElementById('btnAnimalScore').onclick = ()=>{
+  const txt = document.getElementById('animalBox').value.trim();
+  const items = txt.split(/[\s,;]+/).filter(Boolean);
+  const uniq = Array.from(new Set(items));
+  document.getElementById('animalOut').textContent = `ทั้งหมด ${items.length} รายการ • ไม่ซ้ำ ${uniq.length} รายการ`;
+};
+
+/* ====== Stroop mini game ====== */
+const STROOP_COLORS = [
+  {name:"แดง",   css:"#ef4444"},
+  {name:"เขียว", css:"#22c55e"},
+  {name:"น้ำเงิน", css:"#3b82f6"},
+  {name:"ดำ",    css:"#111827"},
+];
+
+let stroopRound = 0, stroopOK = 0, stroopStartTime = 0, stroopSpent = 0;
+let stroopAnswer = null;
+
+const $sw   = id => document.getElementById(id);
+const elWord = $sw('stroopWord');
+const elProg = $sw('stroopProg');
+const elStat = $sw('stroopStatus');
+const BTN_STROOP = Array.from(document.querySelectorAll('[data-stroop]'));
+
+function stroopNext(){
+  if (stroopRound >= 10){
+    const sec = (stroopSpent/1000).toFixed(1);
+    elStat.innerHTML = `จบ! ถูก ${stroopOK}/10 • ใช้เวลา ${sec}s`;
+    elWord.style.color = ""; elWord.textContent = "เสร็จแล้ว";
+    BTN_STROOP.forEach(b=> b.disabled = true);
+    return;
+  }
+  // เลือก "คำ" กับ "สี" แบบสุ่ม (อาจไม่ตรงกัน)
+  const word = STROOP_COLORS[Math.floor(Math.random()*STROOP_COLORS.length)];
+  const col  = STROOP_COLORS[Math.floor(Math.random()*STROOP_COLORS.length)];
+  elWord.textContent = word.name;
+  elWord.style.color = col.css;
+  stroopAnswer = col.name;          // คำตอบคือ "ชื่อสี" ของตัวอักษร
+  stroopRound++;
+  elProg.textContent = `ข้อที่ ${stroopRound} / 10`;
+}
+
+function stroopReset(){
+  stroopRound = 0; stroopOK = 0; stroopSpent = 0;
+  stroopAnswer = null; elStat.textContent = "";
+  BTN_STROOP.forEach(b=> b.disabled = false);
+  stroopStartTime = performance.now();
+  stroopNext();
+}
+
+$sw('btnStroopStart').addEventListener('click', stroopReset);
+
+BTN_STROOP.forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    if (!stroopAnswer) return;
+    if (btn.dataset.stroop === stroopAnswer) stroopOK++;
+    // บันทึกเวลาเมื่อครบ
+    if (stroopRound === 10){
+      stroopSpent = performance.now() - stroopStartTime;
+    }
+    stroopNext();
+  });
+});
+/* ===== end Stroop ===== */
+/* ===== Reaction Time Mini (5 trials) ===== */
+const rtBox = document.getElementById('rtBox');
+const rtStart = document.getElementById('btnRTStart');
+const rtStop  = document.getElementById('btnRTStop');
+const rtProg  = document.getElementById('rtProg');
+const rtMsg   = document.getElementById('rtMsg');
+const rtSum   = document.getElementById('rtSummary');
+
+let rtTrial = 0, rtTimes = [], rtTimer = null, rtReadyAt = 0, rtClickable = false;
+
+function fmtMs(ms){ return Math.round(ms) + ' ms'; }
+function randDelay(min=800, max=2500){ return Math.floor(Math.random()*(max-min+1))+min; }
+
+function rtReset(){
+  clearTimeout(rtTimer); rtTimer = null;
+  rtTrial = 0; rtTimes = []; rtClickable = false; rtReadyAt = 0;
+  rtBox.style.backgroundColor = '#e5e7eb'; // gray-200
+  rtBox.style.color = '#374151';
+  rtBox.textContent = 'แตะ "เริ่ม" เพื่อเริ่มรอบแรก';
+  rtProg.textContent = 'รอบที่ 0 / 5';
+  rtMsg.textContent = 'พร้อม';
+  rtSum.textContent = '';
+  rtStart.disabled = false; rtStop.disabled = true;
+}
+
+function rtNext(){
+  if (rtTrial >= 5){
+    // สรุปผล
+    const n = rtTimes.length || 1;
+    const mean = rtTimes.reduce((a,b)=>a+b,0)/n;
+    const sd   = Math.sqrt(rtTimes.map(t => (t-mean)**2).reduce((a,b)=>a+b,0)/n);
+    rtSum.innerHTML = `สรุป: ค่าเฉลี่ย <b>${fmtMs(mean)}</b> • ส่วนเบี่ยงเบนมาตรฐาน ${fmtMs(sd)}`;
+    rtStart.disabled = false; rtStop.disabled = true;
+    rtMsg.textContent = 'จบแล้ว';
+    return;
+  }
+  rtTrial++;
+  rtProg.textContent = `รอบที่ ${rtTrial} / 5`;
+  rtMsg.textContent = 'รอเปลี่ยนสี... ห้ามกด';
+
+  // ระยะรอแบบสุ่มก่อนเปลี่ยนเป็นเขียว
+  const wait = randDelay();
+  rtClickable = false;
+  rtBox.style.backgroundColor = '#e5e7eb';
+  rtBox.style.color = '#374151';
+  rtBox.textContent = 'รอ...';
+
+  rtTimer = setTimeout(()=>{
+    rtBox.style.backgroundColor = '#059669'; // green-600
+    rtBox.style.color = 'white';
+    rtBox.textContent = 'แตะตอนนี้!';
+    rtClickable = true;
+    rtReadyAt = performance.now();
+  }, wait);
+}
+
+rtBox.addEventListener('click', ()=>{
+  if (!rtStart.disabled) return; // ยังไม่เริ่ม
+  // กดก่อนเวลา = โกง/พลาด
+  if (!rtClickable){
+    rtMsg.textContent = 'กดเร็วเกินไป! รอบนี้นับใหม่';
+    // รีเซ็ตรอบนี้ (ไม่เพิ่ม rtTrial)
+    clearTimeout(rtTimer); rtTimer = null;
+    setTimeout(rtNext, 700);
+    return;
+  }
+  const now = performance.now();
+  const rt = now - rtReadyAt;
+  rtTimes.push(rt);
+  rtMsg.textContent = `ได้ ${fmtMs(rt)} 👍`;
+  rtClickable = false;
+  setTimeout(rtNext, 700);
+});
+
+rtStart.addEventListener('click', ()=>{
+  rtStart.disabled = true; rtStop.disabled = false;
+  rtNext();
+});
+rtStop.addEventListener('click', rtReset);
+
+// initial
+rtReset();
+
+
+/* Init */
+document.getElementById('subjectId').value = newSubjectId();
+</script>
+</body>
+</html>
